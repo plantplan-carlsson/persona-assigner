@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Persona Assigner</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    #logs { border: 1px solid #ccc; padding: 10px; height: 300px; overflow-y: scroll; background: #f9f9f9; }
+    button { padding: 10px 20px; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <h1>Persona Assigner</h1>
+  <button id="runBtn">Run Persona Assignment</button>
+  <h2>Logs</h2>
+  <pre id="logs"></pre>
+
+  <script>
+    const runBtn = document.getElementById('runBtn');
+    const logsEl = document.getElementById('logs');
+
+    runBtn.addEventListener('click', () => {
+      fetch('/run', { method: 'POST' });
+    });
+
+    async function fetchLogs() {
+      const res = await fetch('/logs');
+      const logs = await res.json();
+      logsEl.textContent = logs.join('\n');
+      logsEl.scrollTop = logsEl.scrollHeight;
+    }
+
+    setInterval(fetchLogs, 2000);
+    fetchLogs();
+  </script>
+</body>
+</html>

@@ -1,106 +1,99 @@
 require('dotenv').config();
+const express = require('express');
 const axios = require('axios');
 const OpenAI = require('openai');
 
-// Initialise OpenAI
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const app = express();
+const port = process.env.PORT || 3000;
 
-// Initialise HubSpot API
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const hubspot = axios.create({
   baseURL: 'https://api.hubapi.com',
-  headers: {
-    Authorization: `Bearer ${process.env.HUBSPOT_API_KEY}`,
-    'Content-Type': 'application/json',
-  },
+  headers: { Authorization: `Bearer ${process.env.HUBSPOT_API_KEY}`, 'Content-Type': 'application/json' },
 });
 
-// Fetch contacts from HubSpot
+let logs = [];
+
+function addLog(message) {
+  logs.push(message);
+  if (logs.length > 100) logs.shift();
+  console.log(message);
+}
+
 async function fetchContacts(limit = 10) {
   try {
-    const response = await hubspot.get('/crm/v3/objects/contacts', {
-      params: {
-        limit,
-        properties: ['firstname', 'lastname', 'jobtitle', 'company', 'persona'],
-      },
+    const res = await hubspot.get('/crm/v3/objects/contacts', {
+      params: { limit, properties: ['jobtitle', 'company', 'persona'] },
     });
-    return response.data.results;
+    return res.data.results;
   } catch (error) {
-    console.error('❌ Error fetching contacts:', error.response?.data || error.message);
+    addLog(`Error fetching contacts: ${error.message}`);
     return [];
   }
 }
 
-// Use OpenAI to classify a persona
 async function classifyPersona(jobTitle, company) {
-  const prompt = `Given the job title "${jobTitle}" at the company "${company}", which of the following personas best applies?
-- Architect Alex
-- Designer Dani
-- Developer Drew
-- Executive Ezra
-- Contractor Chris
-- Unknown
-
-Only return the persona name.`;
-
+  const prompt = `Given the job title "${jobTitle}" at the company "${company}", which persona fits best? Choose from Architect Alex, Designer Dani, Developer Drew, Executive Ezra, Contractor Chris, Unknown. Return only the persona name.`;
   try {
     const response = await openai.chat.completions.create({
       model: 'gpt-4',
       messages: [
-        { role: 'system', content: 'You are a helpful assistant that classifies CRM contacts into buyer personas.' },
+        { role: 'system', content: 'You are a helpful assistant classifying CRM contacts into buyer personas.' },
         { role: 'user', content: prompt },
       ],
     });
-
     return response.choices[0].message.content.trim();
   } catch (error) {
-    console.error('❌ Error classifying persona:', error.response?.data || error.message);
+    addLog(`Error classifying persona: ${error.message}`);
     return 'Unknown';
   }
 }
 
-// Update the contact's persona field in HubSpot
 async function updateContactPersona(contactId, persona) {
   try {
-    await hubspot.patch(`/crm/v3/objects/contacts/${contactId}`, {
-      properties: {
-        persona,
-      },
-    });
-    console.log(`✅ Updated contact ${contactId} with persona: ${persona}`);
+    await hubspot.patch(`/crm/v3/objects/contacts/${contactId}`, { properties: { persona } });
+    addLog(`Updated contact ${contactId} to persona: ${persona}`);
   } catch (error) {
-    console.error(`❌ Error updating contact ${contactId}:`, error.response?.data || error.message);
+    addLog(`Error updating contact ${contactId}: ${error.message}`);
   }
 }
 
-// Main runner function
 async function processContacts() {
-  const contacts = await fetchContacts();
-
-  if (!contacts.length) {
-    console.log('⚠️ No contacts found to process.');
-    return;
-  }
-
+  const contacts = await fetchContacts(10);
   for (const contact of contacts) {
     const { id, properties } = contact;
     const { jobtitle, company, persona } = properties;
 
     if (!jobtitle || !company) {
-      console.log(`⏭️ Skipping contact ${id} due to missing job title or company.`);
+      addLog(`Skipping contact ${id} due to missing job title or company.`);
       continue;
     }
-
     if (persona && persona !== '') {
-      console.log(`ℹ️ Contact ${id} already has a persona (${persona}). Skipping.`);
+      addLog(`Contact ${id} already has persona (${persona}), skipping.`);
       continue;
     }
 
-    const predictedPersona = await classifyPersona(jobtitle, company);
-    await updateContactPersona(id, predictedPersona);
+    const assignedPersona = await classifyPersona(jobtitle, company);
+    await updateContactPersona(id, assignedPersona);
   }
 }
 
-// Run the script
-processContacts().catch(console.error);
+app.use(express.static('public'));
+
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/public/index.html');
+});
+
+app.post('/run', async (req, res) => {
+  addLog('Starting persona assignment...');
+  processContacts().then(() => addLog('Persona assignment completed.'));
+  res.json({ status: 'started' });
+});
+
+app.get('/logs', (req, res) => {
+  res.json(logs);
+});
+
+app.listen(port, () => {
+  console.log(`Server listening on http://localhost:${port}`);
+});
