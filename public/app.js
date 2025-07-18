@@ -1,24 +1,20 @@
-const personas = [
-  { name: 'Architect Alex', description: 'Architects and design professionals.' },
-  { name: 'Designer Dani', description: 'Interior and product designers.' },
-  { name: 'Developer Drew', description: 'Software and systems developers.' },
-  { name: 'Executive Ezra', description: 'Senior executives and decision makers.' },
-  { name: 'Contractor Chris', description: 'Construction and facilities contractors.' },
-  { name: 'Unknown', description: 'Unclassified or unknown personas.' }
-];
+async function renderPersonas() {
+  try {
+    const res = await fetch('/api/personas');
+    const data = await res.json();
+    const ul = document.getElementById('personaList');
+    ul.innerHTML = '';
 
-// Render persona list sidebar
-function renderPersonas() {
-  const ul = document.getElementById('personaList');
-  ul.innerHTML = '';
-  personas.forEach(p => {
-    const li = document.createElement('li');
-    li.textContent = `${p.name} — ${p.description}`;
-    ul.appendChild(li);
-  });
+    data.personas.forEach(p => {
+      const li = document.createElement('li');
+      li.textContent = p;
+      ul.appendChild(li);
+    });
+  } catch (error) {
+    console.error('Failed to load personas:', error);
+  }
 }
 
-// Fetch and render contacts table
 async function fetchContacts() {
   try {
     const res = await fetch('/api/contacts');
@@ -43,7 +39,6 @@ async function fetchContacts() {
   }
 }
 
-// Retry persona assignment for a contact
 async function retryContact(contactId) {
   try {
     await fetch(`/api/retry/${contactId}`, { method: 'POST' });
@@ -53,7 +48,6 @@ async function retryContact(contactId) {
   }
 }
 
-// Submit training data
 async function submitTraining() {
   const good = document.getElementById('goodExamples').value.trim();
   const bad = document.getElementById('badExamples').value.trim();
